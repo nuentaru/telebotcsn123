@@ -1,31 +1,67 @@
 import json
+import logging
+import base64
+from pathlib import Path
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = "8523777430:AAGQJQQnz6X4B9B4KaVfhLTJSkP143tNb9k"
-ADMINS = [7014095222]
+import os
+
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID_ENV = os.getenv("ADMIN_ID")
+
+if not TOKEN or not ADMIN_ID_ENV:
+    raise Exception("❌ Thiếu BOT_TOKEN hoặc ADMIN_ID trong Environment Variables")
+
+ADMINS = list(map(int, ADMIN_ID_ENV.split(",")))
 ADMIN_LINK = "https://t.me/NGUYENNAM_888"
+
+
+
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+
+BACKUP_FILE = "data_backup.json"
 DB_FILE = "data.json"
 
 # ================= DATABASE =================
 def load_db():
     try:
-        with open(DB_FILE, "r") as f:
-            data = json.load(f)
-    except:
-        data = {"keys": {}, "users": {}}
+        if Path(DB_FILE).exists():
+            with open(DB_FILE, "r") as f:
+                data = f.read()
+                decoded = base64.b64decode(data).decode()
+                return json.loads(decoded)
 
-    if "admins" not in data:
-        data["admins"] = ADMINS.copy()
+        elif Path(BACKUP_FILE).exists():
+            logging.warning("⚠️ Load từ backup")
+            with open(BACKUP_FILE, "r") as f:
+                data = f.read()
+                decoded = base64.b64decode(data).decode()
+                return json.loads(decoded)
 
-    return data
+    except Exception as e:
+        logging.error(f"Lỗi load DB: {e}")
+
+    return {"keys": {}, "users": {}, "admins": ADMINS.copy()}
 
 def is_admin(uid):
     return uid in db.get("admins", [])
 
 def save_db():
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2)
+    try:
+        with open(DB_FILE, "w") as f:
+            encoded = base64.b64encode(json.dumps(db).encode()).decode()
+            f.write(encoded)
+
+        with open(BACKUP_FILE, "w") as f:
+            encoded = base64.b64encode(json.dumps(db).encode()).decode()
+            f.write(encoded)
+
+    except Exception as e:
+        logging.error(f"Lỗi save DB: {e}")
 
 db = load_db()
 
@@ -138,6 +174,8 @@ async def delkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"✅ ĐÃ XOÁ KEY: {key}")
 
+
+# ====== ADD ADMIN ======
 async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
@@ -154,6 +192,49 @@ async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_db()
 
     await update.message.reply_text(f"✅ ĐÃ THÊM ADMIN: {new_admin}")
+
+
+# ====== ADD XU ======
+async def addxu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
+
+    try:
+        key = context.args[0]
+        amount = int(context.args[1])
+    except:
+        return await update.message.reply_text("❌ /addxu KEY SỐ_XU")
+
+    if key not in db["keys"]:
+        return await update.message.reply_text("❌ KEY KHÔNG TỒN TẠI")
+
+    db["keys"][key]["xu"] += amount
+    save_db()
+
+    await update.message.reply_text(f"✅ +{amount} XU cho {key}")
+
+
+# ====== REMOVE XU ======
+async def removexu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
+
+    try:
+        key = context.args[0]
+        amount = int(context.args[1])
+    except:
+        return await update.message.reply_text("❌ /removexu KEY SỐ_XU")
+
+    if key not in db["keys"]:
+        return await update.message.reply_text("❌ KEY KHÔNG TỒN TẠI")
+
+    db["keys"][key]["xu"] -= amount
+    if db["keys"][key]["xu"] < 0:
+        db["keys"][key]["xu"] = 0
+
+    save_db()
+
+    await update.message.reply_text(f"✅ -{amount} XU của {key}")
 
 # ================= START =================
 
@@ -186,6 +267,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     uid = str(q.from_user.id)
 
+    if uid not in db["users"]:
+        db["users"][uid] = {}
+        save_db()
+
     if q.data == "agree":
         kb = [
             [InlineKeyboardButton("🔑 ĐĂNG NHẬP", callback_data="login")],
@@ -199,6 +284,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📌 CHƯA CÓ KEY → LIÊN HỆ ADMIN",
             reply_markup=InlineKeyboardMarkup(kb)
         )
+
+    elif q.data == "deny":
+        await q.message.edit_text("❌ Bạn đã từ chối sử dụng bot.")
 
     elif q.data == "login":
         db["users"][uid] = {"step": "login"}
@@ -214,6 +302,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await q.answer("❌ CHƯA ĐĂNG NHẬP", show_alert=True)
 
         key = db["users"][uid]["key"]
+
+        if key not in db["keys"]:
+            return await q.answer("❌ KEY KHÔNG TỒN TẠI", show_alert=True)
         xu = db["keys"][key]["xu"]
 
         kb = [
@@ -362,9 +453,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not data_user.get("input_van"):
             return await q.answer("❌ CHƯA NHẬP", show_alert=True)
 
+        if "key" not in data_user:
+            return await q.answer("❌ CHƯA ĐĂNG NHẬP", show_alert=True)
+
+        if "la" not in data_user:  # ✅ FIX crash thiếu la
+            return await q.answer("❌ THIẾU DỮ LIỆU", show_alert=True)
+
+        key = data_user["key"]
+
         so_van = int(data_user["input_van"])
         so_la = data_user["la"]
-        key = data_user["key"]
 
         tong = so_la + so_van
         if so_la >= 6:
@@ -384,7 +482,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         db["keys"][key]["xu"] -= 1
+
+        db["users"][uid]["input_van"] = ""  # ✅ reset
+
         save_db()
+
+        logging.info(f"User {uid} dùng 1 xu | Key: {key} | Còn: {db['keys'][key]['xu']}")
 
         kb = [
             [InlineKeyboardButton("🔁 NHẬP LẠI", callback_data="replay")],
@@ -405,6 +508,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ban = db["users"][uid].get("ban")
 
         db["users"][uid]["step"] = "nhap_la"
+        db["users"][uid]["input_van"] = ""  # ✅ reset ở đây
         save_db()
 
         kb = []
@@ -436,7 +540,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uid not in db["users"]:
         return await update.message.reply_text("👉 /start TRƯỚC")
 
-    if db["users"][uid]["step"] == "login":
+    if db["users"][uid].get("step") == "login":
         parts = text.split()
 
         if len(parts) == 1:
@@ -469,7 +573,9 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(kb)
                 )
 
-            if data["owner"] and data["owner"] != uid:
+            if data["owner"] is None:
+                data["owner"] = uid
+            elif data["owner"] != uid:
                 return await update.message.reply_text("❌ KEY ĐÃ BỊ SỬ DỤNG")
 
             if pin != data["pin"]:
@@ -478,6 +584,8 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data["owner"] = uid
             db["users"][uid] = {"step": "menu", "key": key}
             save_db()
+
+            logging.info(f"User {uid} login với key {key}")
 
             kb = [[InlineKeyboardButton("📊 MENU", callback_data="menu")]]
 
@@ -489,11 +597,16 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(kb)
             )
 
+async def error_handler(update, context):
+    logging.error(f"Lỗi: {context.error}")
+
 # ================= RUN =================
 
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("addadmin", addadmin))
+app.add_handler(CommandHandler("addxu", addxu))
+app.add_handler(CommandHandler("removexu", removexu))
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("genkey", genkey))
 app.add_handler(CommandHandler("active", active))
@@ -503,6 +616,8 @@ app.add_handler(CommandHandler("listkey", listkey))
 app.add_handler(CommandHandler("delkey", delkey))
 app.add_handler(CallbackQueryHandler(button))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
+app.add_error_handler(error_handler)
 
-print("Bot đang chạy...")
+
+logging.info("🚀 Bot đang chạy...")
 app.run_polling()
