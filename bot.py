@@ -656,7 +656,6 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 app.add_error_handler(error_handler)
 
 
-logging.info("🚀 Bot đang chạy...")
 if __name__ == "__main__":
     logging.info("🚀 Bot đang chạy...")
     app.run_polling()
