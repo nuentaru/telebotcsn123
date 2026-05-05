@@ -1,10 +1,11 @@
 import json
 import logging
 import base64
+import time
+from pymongo import MongoClient
 from pathlib import Path
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-
 import os
 
 TOKEN = os.getenv("BOT_TOKEN")
@@ -16,65 +17,93 @@ if not TOKEN or not ADMIN_ID_ENV:
 ADMINS = list(map(int, ADMIN_ID_ENV.split(",")))
 ADMIN_LINK = "https://t.me/NGUYENNAM_888"
 
-
-
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-BACKUP_FILE = "data_backup.json"
-DB_FILE = "data.json"
+MONGO_URI = os.getenv("MONGO_URI")
+
+if not MONGO_URI:
+    raise Exception("❌ Thiếu MONGO_URI trong Environment Variables")
+
+client = MongoClient(MONGO_URI)
+mongo_db = client["telebot"]
+
+col_keys = mongo_db["keys"]
+col_users = mongo_db["users"]
+col_admins = mongo_db["admins"]
 
 # ================= DATABASE =================
-def load_db():
-    try:
-        if Path(DB_FILE).exists():
-            with open(DB_FILE, "r") as f:
-                data = f.read()
-                decoded = base64.b64decode(data).decode()
-                return json.loads(decoded)
 
-        elif Path(BACKUP_FILE).exists():
-            logging.warning("⚠️ Load từ backup")
-            with open(BACKUP_FILE, "r") as f:
-                data = f.read()
-                decoded = base64.b64decode(data).decode()
-                return json.loads(decoded)
+def load_db():
+    data = {
+        "keys": {},
+        "users": {},
+        "admins": ADMINS.copy()
+    }
+
+    try:
+        for k in col_keys.find():
+            data["keys"][str(k["_id"])] = k.get("data", {})
+
+        for u in col_users.find():
+            data["users"][str(u["_id"])] = u.get("data", {})
+
+        admin_doc = col_admins.find_one({"_id": "admins"})
+        if admin_doc:
+            data["admins"] = admin_doc.get("data", ADMINS.copy())
 
     except Exception as e:
-        logging.error(f"Lỗi load DB: {e}")
+        logging.error(f"Lỗi load MongoDB: {e}")
 
-    return {"keys": {}, "users": {}, "admins": ADMINS.copy()}
+    return data
 
-def is_admin(uid):
-    return uid in db.get("admins", [])
 
 def save_db():
     try:
-        with open(DB_FILE, "w") as f:
-            encoded = base64.b64encode(json.dumps(db).encode()).decode()
-            f.write(encoded)
+        for k, v in db["keys"].items():
+            col_keys.update_one({"_id": k}, {"$set": {"data": v}}, upsert=True)
 
-        with open(BACKUP_FILE, "w") as f:
-            encoded = base64.b64encode(json.dumps(db).encode()).decode()
-            f.write(encoded)
+        for u, v in db["users"].items():
+            col_users.update_one({"_id": u}, {"$set": {"data": v}}, upsert=True)
+
+        col_admins.update_one(
+            {"_id": "admins"},
+            {"$set": {"data": db["admins"]}},
+            upsert=True
+        )
 
     except Exception as e:
-        logging.error(f"Lỗi save DB: {e}")
+        logging.error(f"Lỗi save MongoDB: {e}")
+
+
+def is_admin(uid):
+    try:
+        return int(uid) in db.get("admins", [])
+    except:
+        return False
+
+
+def get_user(uid):
+    uid = str(uid)
+    if uid not in db["users"]:
+        db["users"][uid] = {}
+    return db["users"][uid]
+
 
 db = load_db()
 
 # ================= ADMIN =================
 
 async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.message.from_user.id):
+    if not is_admin(update.effective_user.id):
         return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
 
-    try:
-        key = context.args[0]
-    except:
+    if not context.args:
         return await update.message.reply_text("❌ /genkey KEY")
+
+    key = context.args[0].strip()
 
     if key in db["keys"]:
         return await update.message.reply_text("❌ KEY ĐÃ TỒN TẠI")
@@ -91,18 +120,24 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def active(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.message.from_user.id):
+    if not is_admin(update.effective_user.id):
         return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
 
-    try:
-        key, pin, xu = context.args[0], context.args[1], int(context.args[2])
-    except:
+    if len(context.args) < 3:
         return await update.message.reply_text("❌ /active KEY PIN XU")
 
-    if key not in db["keys"]:
+    try:
+        key = context.args[0]
+        pin = context.args[1]
+        xu = int(context.args[2])
+    except:
+        return await update.message.reply_text("❌ PIN hoặc XU không hợp lệ")
+
+    data = db["keys"].get(key)
+    if not data:
         return await update.message.reply_text("❌ KEY KHÔNG TỒN TẠI")
 
-    db["keys"][key].update({
+    data.update({
         "active": True,
         "pin": pin,
         "xu": xu
@@ -112,14 +147,38 @@ async def active(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🔥 ĐÃ KÍCH HOẠT {key}")
 
 
-async def removeadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.message.from_user.id):
+async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
         return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
+
+    if not context.args:
+        return await update.message.reply_text("❌ /addadmin USER_ID")
+
+    try:
+        new_admin = int(context.args[0])
+    except:
+        return await update.message.reply_text("❌ USER_ID không hợp lệ")
+
+    if new_admin in db["admins"]:
+        return await update.message.reply_text("⚠️ ĐÃ LÀ ADMIN")
+
+    db["admins"].append(new_admin)
+    save_db()
+
+    await update.message.reply_text(f"✅ ĐÃ THÊM ADMIN: {new_admin}")
+
+
+async def removeadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
+
+    if not context.args:
+        return await update.message.reply_text("❌ /removeadmin USER_ID")
 
     try:
         uid = int(context.args[0])
     except:
-        return await update.message.reply_text("❌ /removeadmin USER_ID")
+        return await update.message.reply_text("❌ USER_ID không hợp lệ")
 
     if uid not in db["admins"]:
         return await update.message.reply_text("❌ KHÔNG PHẢI ADMIN")
@@ -151,8 +210,8 @@ async def listkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📋 DANH SÁCH KEY\n━━━━━━━━━━━━━━━━━━\n"
 
     for k, v in db["keys"].items():
-        status = "ĐÃ KÍCH HOẠT" if v["active"] else "CHƯA KÍCH HOẠT"
-        text += f"{k} | {status} | {v['xu']} xu\n"
+        status = "ĐÃ KÍCH HOẠT" if v.get("active") else "CHƯA KÍCH HOẠT"
+        text += f"{k} | {status} | {v.get('xu',0)} xu\n"
 
     await update.message.reply_text(text)
 
@@ -161,10 +220,10 @@ async def delkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
 
-    try:
-        key = context.args[0]
-    except:
+    if not context.args:
         return await update.message.reply_text("❌ /delkey KEY")
+
+    key = context.args[0]
 
     if key not in db["keys"]:
         return await update.message.reply_text("❌ KEY KHÔNG TỒN TẠI")
@@ -175,63 +234,41 @@ async def delkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ ĐÃ XOÁ KEY: {key}")
 
 
-# ====== ADD ADMIN ======
-async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.message.from_user.id):
-        return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
-
-    try:
-        new_admin = int(context.args[0])
-    except:
-        return await update.message.reply_text("❌ /addadmin USER_ID")
-
-    if new_admin in db["admins"]:
-        return await update.message.reply_text("⚠️ ĐÃ LÀ ADMIN")
-
-    db["admins"].append(new_admin)
-    save_db()
-
-    await update.message.reply_text(f"✅ ĐÃ THÊM ADMIN: {new_admin}")
-
-
-# ====== ADD XU ======
 async def addxu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
 
-    try:
-        key = context.args[0]
-        amount = int(context.args[1])
-    except:
+    if len(context.args) < 2:
         return await update.message.reply_text("❌ /addxu KEY SỐ_XU")
 
-    if key not in db["keys"]:
+    key = context.args[0]
+    amount = int(context.args[1])
+
+    data = db["keys"].get(key)
+    if not data:
         return await update.message.reply_text("❌ KEY KHÔNG TỒN TẠI")
 
-    db["keys"][key]["xu"] += amount
+    data["xu"] = data.get("xu", 0) + amount
     save_db()
 
     await update.message.reply_text(f"✅ +{amount} XU cho {key}")
 
 
-# ====== REMOVE XU ======
 async def removexu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ KHÔNG CÓ QUYỀN")
 
-    try:
-        key = context.args[0]
-        amount = int(context.args[1])
-    except:
+    if len(context.args) < 2:
         return await update.message.reply_text("❌ /removexu KEY SỐ_XU")
 
-    if key not in db["keys"]:
+    key = context.args[0]
+    amount = int(context.args[1])
+
+    data = db["keys"].get(key)
+    if not data:
         return await update.message.reply_text("❌ KEY KHÔNG TỒN TẠI")
 
-    db["keys"][key]["xu"] -= amount
-    if db["keys"][key]["xu"] < 0:
-        db["keys"][key]["xu"] = 0
-
+    data["xu"] = max(0, data.get("xu", 0) - amount)
     save_db()
 
     await update.message.reply_text(f"✅ -{amount} XU của {key}")
@@ -267,9 +304,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     uid = str(q.from_user.id)
 
-    if uid not in db["users"]:
-        db["users"][uid] = {}
-        save_db()
+    # ✅ FIX: tránh crash user chưa tồn tại
+    user = db["users"].setdefault(uid, {})
+    save_db()
 
     if q.data == "agree":
         kb = [
@@ -305,6 +342,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if key not in db["keys"]:
             return await q.answer("❌ KEY KHÔNG TỒN TẠI", show_alert=True)
+
         xu = db["keys"][key]["xu"]
 
         kb = [
@@ -456,7 +494,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "key" not in data_user:
             return await q.answer("❌ CHƯA ĐĂNG NHẬP", show_alert=True)
 
-        if "la" not in data_user:  # ✅ FIX crash thiếu la
+        if "la" not in data_user:
             return await q.answer("❌ THIẾU DỮ LIỆU", show_alert=True)
 
         key = data_user["key"]
@@ -477,13 +515,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Kết quả kiểm tra \n"
                 "-> KHÔNG ĐỦ XU \n"
                 "━━━━━━━━━━━━━━━━━━\n"
-                "Số dư: 0 xu\n"
+                "💰 Số dư: 0 xu\n"
                 "⚠️  BẠN KHÔNG ĐỦ XU ĐỂ CÓ THỂ TIẾP TỤC, VUI LÒNG LIÊN HỆ ADMIN ĐỂ ĐƯỢC CẤP XU"
             )
 
         db["keys"][key]["xu"] -= 1
-
-        db["users"][uid]["input_van"] = ""  # ✅ reset
+        db["users"][uid]["input_van"] = ""
 
         save_db()
 
@@ -495,12 +532,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
         await q.message.edit_text(
-            "Đã hoàn thành\n"
+            "✅ Đã hoàn thành\n"
             "━━━━━━━━━━━━━━━━━━\n"
             "Kết quả kiểm tra\n"
             f"-> {ket_qua}\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"Số dư: {db['keys'][key]['xu']} xu",
+            f"💰 Số dư: {db['keys'][key]['xu']} xu",
             reply_markup=InlineKeyboardMarkup(kb)
         )
 
@@ -508,7 +545,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ban = db["users"][uid].get("ban")
 
         db["users"][uid]["step"] = "nhap_la"
-        db["users"][uid]["input_van"] = ""  # ✅ reset ở đây
+        db["users"][uid]["input_van"] = ""
         save_db()
 
         kb = []
