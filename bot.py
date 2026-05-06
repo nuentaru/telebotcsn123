@@ -656,17 +656,26 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 app.add_error_handler(error_handler)
 
 
+# ================= WEBHOOK + FLASK =================
+
 from flask import Flask, request
 import asyncio
 
 app_web = Flask(__name__)
 
+# tạo event loop global
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+
 @app_web.route(f"/webhook/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, app.bot)
 
-    await app.process_update(update)
+    # chạy async trong loop
+    loop.run_until_complete(app.process_update(update))
+
     return "OK"
 
 
@@ -677,6 +686,8 @@ def home():
 
 async def setup():
     await app.initialize()
+    await app.start()  # 🔥 bắt buộc
+
     await app.bot.delete_webhook(drop_pending_updates=True)
 
     url = os.getenv("RENDER_EXTERNAL_URL")
@@ -689,10 +700,10 @@ async def setup():
     print(f"✅ Webhook set: {webhook_url}")
 
 
-if __name__ == "__main__":
-    import asyncio
+# ================= MAIN =================
 
-    asyncio.run(setup())
+if __name__ == "__main__":
+    loop.run_until_complete(setup())
 
     port = int(os.environ.get("PORT", 10000))
     app_web.run(host="0.0.0.0", port=port)
