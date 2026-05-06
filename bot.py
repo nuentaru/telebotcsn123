@@ -661,13 +661,10 @@ import asyncio
 
 app_web = Flask(__name__)
 
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
 @app_web.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
-    loop.create_task(app.process_update(update))
+    asyncio.run(app.process_update(update))
     return "OK"
 
 @app_web.route("/")
@@ -681,7 +678,10 @@ def set_webhook():
 
     webhook_url = f"{url}/webhook/{TOKEN}"
 
-    loop.run_until_complete(app.bot.set_webhook(webhook_url))
+    asyncio.run(app.initialize())
+    asyncio.run(app.bot.set_webhook(webhook_url))
+    asyncio.run(app.start())
+
     print(f"✅ Webhook set: {webhook_url}")
 
 if __name__ == "__main__":
