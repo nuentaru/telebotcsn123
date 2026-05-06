@@ -662,30 +662,37 @@ import asyncio
 app_web = Flask(__name__)
 
 @app_web.route(f"/webhook/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), app.bot)
-    asyncio.run(app.process_update(update))
+async def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, app.bot)
+
+    await app.process_update(update)
     return "OK"
+
 
 @app_web.route("/")
 def home():
     return "Bot is running!"
 
-def set_webhook():
+
+async def setup():
+    await app.initialize()
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
     url = os.getenv("RENDER_EXTERNAL_URL")
     if not url:
         raise Exception("❌ Thiếu RENDER_EXTERNAL_URL")
 
     webhook_url = f"{url}/webhook/{TOKEN}"
-
-    asyncio.run(app.initialize())
-    asyncio.run(app.bot.set_webhook(webhook_url))
-    asyncio.run(app.start())
+    await app.bot.set_webhook(webhook_url)
 
     print(f"✅ Webhook set: {webhook_url}")
 
+
 if __name__ == "__main__":
-    set_webhook()
+    import asyncio
+
+    asyncio.run(setup())
 
     port = int(os.environ.get("PORT", 10000))
     app_web.run(host="0.0.0.0", port=port)
