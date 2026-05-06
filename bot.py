@@ -656,25 +656,36 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 app.add_error_handler(error_handler)
 
 
-from flask import Flask
-import threading
+from flask import Flask, request
+import asyncio
 
 app_web = Flask(__name__)
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+@app_web.route(f"/webhook/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    loop.create_task(app.process_update(update))
+    return "OK"
 
 @app_web.route("/")
 def home():
     return "Bot is running!"
 
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app_web.run(host="0.0.0.0", port=port)
+def set_webhook():
+    url = os.getenv("RENDER_EXTERNAL_URL")
+    if not url:
+        raise Exception("❌ Thiếu RENDER_EXTERNAL_URL")
 
-def run_bot():
-    app.run_polling()
+    webhook_url = f"{url}/webhook/{TOKEN}"
+
+    loop.run_until_complete(app.bot.set_webhook(webhook_url))
+    print(f"✅ Webhook set: {webhook_url}")
 
 if __name__ == "__main__":
-    t1 = threading.Thread(target=run_bot)
-    t1.daemon = True
-    t1.start()
+    set_webhook()
 
-    run_web()
+    port = int(os.environ.get("PORT", 10000))
+    app_web.run(host="0.0.0.0", port=port)
