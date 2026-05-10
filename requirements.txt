@@ -1,6 +1,8 @@
 python-telegram-bot==22.7
 pymongo
 dnspython
-flask
+flask[async]
 python-dotenv
 gunicorn
+uvicorn
+hypercorn
