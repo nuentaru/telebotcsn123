@@ -430,7 +430,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         kb.append([InlineKeyboardButton("🔙 CHỌN BÀN", callback_data="chonban")])
 
-        await q.message.delete()
+        try:
+            await q.message.delete()
+        except:
+            pass
 
         with open(LA_BAI_IMG, "rb") as photo:
             await context.bot.send_photo(
@@ -473,7 +476,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         kb.append([InlineKeyboardButton("🔙 CHỌN LẠI", callback_data="chonban")])
 
-        await q.message.delete()
+        try:
+            await q.message.delete()
+        except:
+            pass
 
         with open(TOTAL_VAN_IMG, "rb") as photo:
             await context.bot.send_photo(
@@ -512,7 +518,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         kb.append([InlineKeyboardButton("🔙 CHỌN LẠI", callback_data="chonban")])
 
-        await q.message.delete()
+        try:
+            await q.message.delete()
+        except:
+            pass
 
         with open(TOTAL_VAN_IMG, "rb") as photo:
             await context.bot.send_photo(
@@ -755,10 +764,16 @@ async def setup():
 
 # ================= MAIN =================
 
+from threading import Thread
+
 if __name__ == "__main__":
     loop.run_until_complete(setup())
 
+    # chạy event loop telegram ở thread riêng
+    Thread(target=loop.run_forever, daemon=True).start()
+
     port = int(os.environ.get("PORT", 10000))
+
     app_web.run(
         host="0.0.0.0",
         port=port,
