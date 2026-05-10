@@ -24,6 +24,10 @@ if not TOKEN or not ADMIN_ID_ENV:
 ADMINS = list(map(int, ADMIN_ID_ENV.split(",")))
 ADMIN_LINK = "https://t.me/NGUYENNAM_888"
 
+WELCOME_IMG = "images/chaomung.png"
+LA_BAI_IMG = "images/solabai.jpg"
+TOTAL_VAN_IMG = "images/sovanbai.jpg"
+
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -327,10 +331,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("❌ TỪ CHỐI", callback_data="deny")
     ]]
 
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(kb)
-    )
+    with open(WELCOME_IMG, "rb") as photo:
+        await update.message.reply_photo(
+            photo=photo,
+            caption=text,
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
 
 # ================= BUTTON =================
 
@@ -491,12 +497,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ])
 
-        await q.message.edit_text(
-            f"🎯 BÀN {ban}\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "📌 BAO NHIÊU LÁ BÀI?",
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
+        await q.message.delete()
+
+        with open(LA_BAI_IMG, "rb") as photo:
+            await context.bot.send_photo(
+                chat_id=q.message.chat.id,
+                photo=photo,
+                caption=(
+                    f"🎯 BÀN {ban}\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    "📌 BAO NHIÊU LÁ BÀI?"
+                ),
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
 
     elif q.data.startswith("la_"):
 
@@ -541,12 +554,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ])
 
-        await q.message.edit_text(
-            "📊 TOTAL (SỐ VÁN BÀI)?\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "Đã nhập: ",
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
+        await q.message.delete()
+
+        with open(TOTAL_VAN_IMG, "rb") as photo:
+            await context.bot.send_photo(
+                chat_id=q.message.chat.id,
+                photo=photo,
+                caption=(
+                    "📊 TOTAL (SỐ VÁN BÀI)?\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    "Đã nhập: "
+                ),
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
 
     elif q.data.startswith("van_") and q.data not in ["van_ok", "van_clear"]:
 
@@ -591,12 +611,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ])
 
-        await q.message.edit_text(
-            "📊 TOTAL (SỐ VÁN BÀI)?\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"Đã nhập: {current}",
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
+        await q.message.delete()
+
+        with open(TOTAL_VAN_IMG, "rb") as photo:
+            await context.bot.send_photo(
+                chat_id=q.message.chat.id,
+                photo=photo,
+                caption=(
+                    "📊 TOTAL (SỐ VÁN BÀI)?\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    f"Đã nhập: {current}"
+                ),
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
 
     elif q.data == "van_clear":
 
