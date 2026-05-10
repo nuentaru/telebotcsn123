@@ -713,69 +713,12 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 app.add_error_handler(error_handler)
 
 
-# ================= WEBHOOK + FLASK =================
-
-from flask import Flask, request
-import asyncio
-
-app_web = Flask(__name__)
-
-# tạo event loop global
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
-
-@app_web.route(f"/webhook/{TOKEN}", methods=["POST"])
-def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, app.bot)
-
-    asyncio.run_coroutine_threadsafe(
-        app.process_update(update),
-        loop
-    )
-
-    return "OK"
-
-@app_web.route("/")
-def home():
-    return "Bot is running!"
-
-@app_web.route("/ping")
-def ping():
-    return "pong"
-
-
-async def setup():
-    await app.initialize()
-    await app.start()  # 🔥 bắt buộc
-
-    await app.bot.delete_webhook(drop_pending_updates=True)
-
-    url = os.getenv("RENDER_EXTERNAL_URL")
-    if not url:
-        raise Exception("❌ Thiếu RENDER_EXTERNAL_URL")
-
-    webhook_url = f"{url}/webhook/{TOKEN}"
-    await app.bot.set_webhook(webhook_url)
-
-    print(f"✅ Webhook set: {webhook_url}")
-
 
 # ================= MAIN =================
 
-from threading import Thread
-
 if __name__ == "__main__":
-    loop.run_until_complete(setup())
+    print("🤖 BOT ĐANG CHẠY...")
 
-    # chạy event loop telegram ở thread riêng
-    Thread(target=loop.run_forever, daemon=True).start()
-
-    port = int(os.environ.get("PORT", 10000))
-
-    app_web.run(
-        host="0.0.0.0",
-        port=port,
-        use_reloader=False
+    app.run_polling(
+        drop_pending_updates=True
     )
