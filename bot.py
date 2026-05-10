@@ -718,7 +718,10 @@ app.add_error_handler(error_handler)
 
 if __name__ == "__main__":
     print("🤖 BOT ĐANG CHẠY...")
+import asyncio
 
-    app.run_polling(
-        drop_pending_updates=True
-    )
+async def remove_webhook():
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
+asyncio.run(remove_webhook())
+    app.run_polling()
