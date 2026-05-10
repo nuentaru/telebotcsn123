@@ -30,10 +30,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 if not MONGO_URI:
     raise Exception("❌ Thiếu MONGO_URI trong Environment Variables")
 
-client = MongoClient(
-    MONGO_URI,
-    serverSelectionTimeoutMS=5000
-)
+client = MongoClient(MONGO_URI)
 mongo_db = client["telebot"]
 
 col_keys = mongo_db["keys"]
@@ -248,10 +245,7 @@ async def addxu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❌ /addxu KEY SỐ_XU")
 
     key = context.args[0]
-    try:
-        amount = int(context.args[1])
-    except:
-        return await update.message.reply_text("❌ SỐ XU KHÔNG HỢP LỆ")
+    amount = int(context.args[1])
 
     data = db["keys"].get(key)
     if not data:
@@ -271,10 +265,7 @@ async def removexu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❌ /removexu KEY SỐ_XU")
 
     key = context.args[0]
-    try:
-        amount = int(context.args[1])
-    except:
-        return await update.message.reply_text("❌ SỐ XU KHÔNG HỢP LỆ")
+    amount = int(context.args[1])
 
     data = db["keys"].get(key)
     if not data:
@@ -318,17 +309,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    try:
-        await q.answer()
-    except:
-        pass
+    await q.answer()
 
     uid = str(q.from_user.id)
 
     # ✅ FIX: tránh crash user chưa tồn tại
-    if uid not in db["users"]:
-        db["users"][uid] = {}
-        save_db()
+    user = db["users"].setdefault(uid, {})
+    save_db()
 
     if q.data == "agree":
         kb = [
@@ -450,9 +437,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db["users"][uid]["la"] = so_la
         db["users"][uid]["step"] = "nhap_van"
         db["users"][uid]["input_van"] = ""
-
-        current = db["users"][uid]["input_van"]
-        
         save_db()
 
         kb = []
@@ -721,20 +705,15 @@ def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, app.bot)
 
-    asyncio.run_coroutine_threadsafe(
-        app.process_update(update),
-        loop
-    )
+    # chạy async trong loop
+    loop.run_until_complete(app.process_update(update))
 
     return "OK"
+
 
 @app_web.route("/")
 def home():
     return "Bot is running!"
-
-@app_web.route("/ping")
-def ping():
-    return "pong"
 
 
 async def setup():
@@ -759,8 +738,4 @@ if __name__ == "__main__":
     loop.run_until_complete(setup())
 
     port = int(os.environ.get("PORT", 10000))
-    app_web.run(
-        host="0.0.0.0",
-        port=port,
-        use_reloader=False
-    )
+    app_web.run(host="0.0.0.0", port=port)
