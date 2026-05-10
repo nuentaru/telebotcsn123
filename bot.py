@@ -30,7 +30,10 @@ MONGO_URI = os.getenv("MONGO_URI")
 if not MONGO_URI:
     raise Exception("❌ Thiếu MONGO_URI trong Environment Variables")
 
-client = MongoClient(MONGO_URI)
+client = MongoClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=5000
+)
 mongo_db = client["telebot"]
 
 col_keys = mongo_db["keys"]
@@ -245,7 +248,10 @@ async def addxu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❌ /addxu KEY SỐ_XU")
 
     key = context.args[0]
-    amount = int(context.args[1])
+    try:
+        amount = int(context.args[1])
+    except:
+        return await update.message.reply_text("❌ SỐ XU KHÔNG HỢP LỆ")
 
     data = db["keys"].get(key)
     if not data:
@@ -265,7 +271,10 @@ async def removexu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❌ /removexu KEY SỐ_XU")
 
     key = context.args[0]
-    amount = int(context.args[1])
+    try:
+        amount = int(context.args[1])
+    except:
+        return await update.message.reply_text("❌ SỐ XU KHÔNG HỢP LỆ")
 
     data = db["keys"].get(key)
     if not data:
@@ -297,23 +306,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("❌ TỪ CHỐI", callback_data="deny")
     ]]
 
-    await update.message.reply_photo(
-    photo=open(WELCOME_IMG, "rb"),
-    caption=text,
-    reply_markup=InlineKeyboardMarkup(kb)
-)
+    with open(WELCOME_IMG, "rb") as photo:
+        await update.message.reply_photo(
+            photo=photo,
+            caption=text,
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+    
 
 # ================= BUTTON =================
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    await q.answer()
+    try:
+        await q.answer()
+    except:
+        pass
 
     uid = str(q.from_user.id)
 
     # ✅ FIX: tránh crash user chưa tồn tại
-    user = db["users"].setdefault(uid, {})
-    save_db()
+    if uid not in db["users"]:
+        db["users"][uid] = {}
+        save_db()
 
     if q.data == "agree":
         kb = [
@@ -417,16 +432,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await q.message.delete()
 
-        await context.bot.send_photo(
-            chat_id=q.message.chat_id,
-            photo=open(LA_BAI_IMG, "rb"),
-            caption=(
-                f"🎯 BÀN {ban}\n"
-                "━━━━━━━━━━━━━━━━━━\n"
-                "📌 BAO NHIÊU LÁ BÀI?"
-            ),
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
+        with open(LA_BAI_IMG, "rb") as photo:
+            await context.bot.send_photo(
+                chat_id=q.message.chat.id,
+                photo=photo,
+                caption=(
+                    f"🎯 BÀN {ban}\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    "📌 BAO NHIÊU LÁ BÀI?"
+                ),
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
 
     elif q.data.startswith("la_"):
         so_la = int(q.data.split("_")[1])
@@ -434,6 +450,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db["users"][uid]["la"] = so_la
         db["users"][uid]["step"] = "nhap_van"
         db["users"][uid]["input_van"] = ""
+
+        current = db["users"][uid]["input_van"]
+        
         save_db()
 
         kb = []
@@ -456,16 +475,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await q.message.delete()
 
-        await context.bot.send_photo(
-            chat_id=q.message.chat_id,
-            photo=open(TOTAL_VAN_IMG, "rb"),
-            caption=(
-                "📊 TOTAL (SỐ VÁN BÀI)?\n"
-                "━━━━━━━━━━━━━━━━━━\n"
-                "Đã nhập: "
-            ),
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
+        with open(TOTAL_VAN_IMG, "rb") as photo:
+            await context.bot.send_photo(
+                chat_id=q.message.chat.id,
+                photo=photo,
+                caption=(
+                    "📊 TOTAL (SỐ VÁN BÀI)?\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    f"Đã nhập: {current}"
+                ),
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
 
     elif q.data.startswith("van_") and q.data not in ["van_ok", "van_clear"]:
         num = q.data.split("_")[1]
@@ -494,16 +514,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await q.message.delete()
 
-        await context.bot.send_photo(
-            chat_id=q.message.chat_id,
-            photo=open(TOTAL_VAN_IMG, "rb"),
-            caption=(
-                "📊 TOTAL (SỐ VÁN BÀI)?\n"
-                "━━━━━━━━━━━━━━━━━━\n"
-                f"Đã nhập: {current}"
-            ),
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
+        with open(TOTAL_VAN_IMG, "rb") as photo:
+            await context.bot.send_photo(
+                chat_id=q.message.chat.id,
+                photo=photo,
+                caption=(
+                    "📊 TOTAL (SỐ VÁN BÀI)?\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    f"Đã nhập: {current}"
+                ),
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
 
     elif q.data == "van_clear":
         db["users"][uid]["input_van"] = ""
@@ -533,6 +554,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         ket_qua = "CON" if tong % 2 == 0 else "CÁI"
 
+        if key not in db["keys"]:
+            return await q.message.edit_text("❌ KEY KHÔNG TỒN TẠI")
         if db["keys"][key]["xu"] <= 0:
             return await q.message.edit_text(
                 "❌ Đã hoàn thành\n"
@@ -698,15 +721,20 @@ def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, app.bot)
 
-    # chạy async trong loop
-    loop.run_until_complete(app.process_update(update))
+    asyncio.run_coroutine_threadsafe(
+        app.process_update(update),
+        loop
+    )
 
     return "OK"
-
 
 @app_web.route("/")
 def home():
     return "Bot is running!"
+
+@app_web.route("/ping")
+def ping():
+    return "pong"
 
 
 async def setup():
@@ -731,4 +759,8 @@ if __name__ == "__main__":
     loop.run_until_complete(setup())
 
     port = int(os.environ.get("PORT", 10000))
-    app_web.run(host="0.0.0.0", port=port)
+    app_web.run(
+        host="0.0.0.0",
+        port=port,
+        use_reloader=False
+    )
