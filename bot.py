@@ -16,6 +16,9 @@ if not TOKEN or not ADMIN_ID_ENV:
 
 ADMINS = list(map(int, ADMIN_ID_ENV.split(",")))
 ADMIN_LINK = "https://t.me/NGUYENNAM_888"
+WELCOME_IMG = "images/welcome.jpg"
+LA_BAI_IMG = "images/la_bai.jpg"
+TOTAL_VAN_IMG = "images/total_van.jpg"
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -294,7 +297,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("❌ TỪ CHỐI", callback_data="deny")
     ]]
 
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
+    await update.message.reply_photo(
+    photo=open(WELCOME_IMG, "rb"),
+    caption=text,
+    reply_markup=InlineKeyboardMarkup(kb)
+)
 
 # ================= BUTTON =================
 
@@ -408,10 +415,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         kb.append([InlineKeyboardButton("🔙 CHỌN BÀN", callback_data="chonban")])
 
-        await q.message.edit_text(
-            f"🎯 BÀN {ban}\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "📌 BAO NHIÊU LÁ BÀI?",
+        await q.message.delete()
+
+        await context.bot.send_photo(
+            chat_id=q.message.chat_id,
+            photo=open(LA_BAI_IMG, "rb"),
+            caption=(
+                f"🎯 BÀN {ban}\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "📌 BAO NHIÊU LÁ BÀI?"
+            ),
             reply_markup=InlineKeyboardMarkup(kb)
         )
 
@@ -441,10 +454,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         kb.append([InlineKeyboardButton("🔙 CHỌN LẠI", callback_data="chonban")])
 
-        await q.message.edit_text(
-            "📊 TOTAL (SỐ VÁN BÀI)?\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "Đã nhập: ",
+        await q.message.delete()
+
+        await context.bot.send_photo(
+            chat_id=q.message.chat_id,
+            photo=open(TOTAL_VAN_IMG, "rb"),
+            caption=(
+                "📊 TOTAL (SỐ VÁN BÀI)?\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "Đã nhập: "
+            ),
             reply_markup=InlineKeyboardMarkup(kb)
         )
 
@@ -473,10 +492,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         kb.append([InlineKeyboardButton("🔙 CHỌN LẠI", callback_data="chonban")])
 
-        await q.message.edit_text(
-            "📊 TOTAL (SỐ VÁN BÀI)?\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"Đã nhập: {current}",
+        await q.message.delete()
+
+        await context.bot.send_photo(
+            chat_id=q.message.chat_id,
+            photo=open(TOTAL_VAN_IMG, "rb"),
+            caption=(
+                "📊 TOTAL (SỐ VÁN BÀI)?\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"Đã nhập: {current}"
+            ),
             reply_markup=InlineKeyboardMarkup(kb)
         )
 
