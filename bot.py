@@ -839,7 +839,12 @@ async def error_handler(update, context):
 
 # ================= RUN =================
 
-app = ApplicationBuilder().token(TOKEN).build()
+app = (
+    ApplicationBuilder()
+    .token(TOKEN)
+    .concurrent_updates(True)
+    .build()
+)
 
 app.add_handler(CommandHandler("addadmin", addadmin))
 app.add_handler(CommandHandler("addxu", addxu))
@@ -870,20 +875,16 @@ import asyncio
 
 app_web = Flask(__name__)
 
-# tạo event loop global
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
 
 
 @app_web.route(f"/webhook/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
 
     data = request.get_json(force=True)
 
     update = Update.de_json(data, app.bot)
 
-    # chạy async trong loop
-    loop.run_until_complete(app.process_update(update))
+    await app.process_update(update)
 
     return "OK"
 
@@ -916,7 +917,7 @@ async def setup():
 
 if __name__ == "__main__":
 
-    loop.run_until_complete(setup())
+    asyncio.run(setup())
 
     port = int(os.environ.get("PORT", 10000))
 
