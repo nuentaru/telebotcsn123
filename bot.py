@@ -639,7 +639,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "-> KHÔNG ĐỦ XU \n"
                 "━━━━━━━━━━━━━━━━━━\n"
                 "💰 Số dư: 0 xu\n"
-                "⚠️ BẠN KHÔNG ĐỦ XU ĐỂ CÓ THỂ TIẾP TỤC, VUI LÒNG LIÊN HỆ ADMIN ĐỂ ĐƯỢC CẤP XU"
+                "⚠️ BẠN KHÔNG ĐỦ XU ĐỂ CÓ THỂ TIẾP TỤC, VUI LÒNG LIÊN HỆ ADMIN ĐỂ ĐƯỢC CẤP XU\n"
+                "LIÊN HỆ: @NGUYENNAM_888"
             )
 
         db["keys"][key]["xu"] -= 1
