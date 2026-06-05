@@ -310,7 +310,7 @@ async def removexu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
-        "🎉 CHÀO MỪNG BẠN ĐẾN VỚI BOT U888 2026\n"
+        "🎉 CHÀO MỪNG BẠN ĐẾN VỚI BOT SC88 2026\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "🤖 HỖ TRỢ PHÂN TÍCH BCR\n"
         "🛡️ CAM KẾT BẢO MẬT THÔNG TIN\n"
